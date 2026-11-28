@@ -21,7 +21,7 @@ local function RebuildRoster()
     rosterCount = 0
     if not IsInGuild() then return end
     for i = 1, GetNumGuildMembers() or 0 do
-        local name, rank, rankIndex, level, _, _, _, _, online, _, classFile = GetGuildRosterInfo(i)
+        local name, rank, rankIndex, level, _, zone, _, _, online, _, classFile = GetGuildRosterInfo(i)
         if name then
             roster[ns.NameKey(name)] = {
                 name = name,
@@ -30,6 +30,8 @@ local function RebuildRoster()
                 level = level,
                 class = classFile,
                 online = online and true or false,
+                -- (where the game shows them in the guild roster, while online)
+                zone = online and type(zone) == "string" and zone ~= "" and zone or nil,
             }
             rosterCount = rosterCount + 1
         end

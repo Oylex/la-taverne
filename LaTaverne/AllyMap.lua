@@ -704,6 +704,26 @@ function AllyMap:SetShow(scope, on)
     if ns.UI and ns.UI.Refresh then ns.UI:Refresh() end
 end
 
+-- The zone a player shares, by name: from their last position while it's fresh (a city's or a
+-- cave's own map read as its zone), nil when they don't share it (sharing off, in an instance,
+-- nothing heard lately). For the Professions answers.
+local ZONE_TYPE = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+function AllyMap:ZoneOf(name)
+    local key = type(name) == "string" and ns.NameKey(name)
+    local e = key and live[key]
+    if not e or GetTime() - e.at > (e.lease or GONE_AFTER) then return nil end
+    local mapID = e.m
+    for _ = 1, 5 do
+        local ok, info = pcall(C_Map.GetMapInfo, mapID)
+        if not ok or not info then return nil end
+        if info.mapType <= ZONE_TYPE or not info.parentMapID or info.parentMapID == 0 then
+            return type(info.name) == "string" and info.name ~= "" and info.name or nil
+        end
+        mapID = info.parentMapID
+    end
+    return nil
+end
+
 function AllyMap:Count()
     local n = 0
     for _ in pairs(live) do n = n + 1 end

@@ -1,8 +1,8 @@
 -- The Professions page: who in my guild or the allied guilds can make a recipe.
 -- - Left: a search box (a recipe's name, or shift-click an item into it) and the recipes that
 --   match, from this client's own recipe list (Recipes.lua: nothing is asked while typing).
--- - Right: the recipe picked, Ask the alliance, then the answers as they come: who answered,
---   which of their characters know it (an alt is named), available to help,
+-- - Right: the recipe picked, Search, then the answers as they come: who answered and their
+--   zone when they share it on the map (or the guild roster shows it), which of their characters know it (an alt is named), available to help,
 --   cooldown, and Whisper (the chat box opened on them, a short text with the item's link,
 --   not sent). My own characters are listed at once.
 -- - Bottom: share my recipes (answer the questions), available to help.
@@ -41,6 +41,22 @@ local function RecipeIcon(id)
     icon = ok and icon or nil
     if icon then icons[id] = icon end
     return icon or "Interface\\Icons\\INV_Misc_QuestionMark"
+end
+
+-- A recipe's tooltip: the game's own one for the item it makes (stats, level, binding), else the
+-- spell's (enchants make no item), then its profession and whether I know it. Only the names
+-- when the client has neither.
+local function RecipeTooltip(owner, entry)
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    local ok, out = pcall(C_TradeSkillUI.GetRecipeOutputItemData, entry.id)
+    local itemID = ok and type(out) == "table" and out.itemID
+    local shown = itemID and itemID > 0 and pcall(GameTooltip.SetItemByID, GameTooltip, itemID)
+    if not shown then shown = pcall(GameTooltip.SetSpellByID, GameTooltip, entry.id) end
+    if not shown or GameTooltip:NumLines() == 0 then GameTooltip:SetText(entry.name) end
+    local prof = ns.Recipes:ProfessionName(entry.prof)
+    if prof then GameTooltip:AddLine(prof, 0.6, 0.6, 0.6) end
+    if ns.Recipes:Knows(entry.id) then GameTooltip:AddLine(L["You know this recipe."], 0.13, 1, 0.13) end
+    GameTooltip:Show()
 end
 
 local function Duration(seconds)
@@ -182,11 +198,7 @@ local function InitSuggestion(row, entry)
             panel.linked = nil
             Fill()
         end)
-        row:SetScript("OnEnter", function(self)
-            local lines = { self.entry.name, ns.Recipes:ProfessionName(self.entry.prof) or "" }
-            if ns.Recipes:Knows(self.entry.id) then lines[#lines + 1] = "|cff20ff20" .. L["You know this recipe."] .. "|r" end
-            K.ShowTooltip(self, lines)
-        end)
+        row:SetScript("OnEnter", function(self) RecipeTooltip(self, self.entry) end)
         row:SetScript("OnLeave", function() GameTooltip:Hide() end)
     end
     row.entry = entry
@@ -211,6 +223,15 @@ local function KnowsLine(answer)
     return table.concat(parts, ", ")
 end
 
+-- Where the one who answered is: the zone they share on the map (AllyMap.lua), else, for a
+-- guildmate, the one the guild roster shows. Nil when neither says.
+local function ZoneOf(name)
+    local zone = ns.AllyMap and ns.AllyMap.ZoneOf and ns.AllyMap:ZoneOf(name)
+    if zone then return zone end
+    local member = ns.Guild:GetMember(name)
+    return member and member.zone
+end
+
 local function InitAnswer(row, answer)
     local K = Kit()
     if not row.init then
@@ -233,7 +254,9 @@ local function InitAnswer(row, answer)
         end)
     end
     row.answer = answer
-    row.name:SetText((answer.mine and ("|cff808080" .. L["You"] .. ":|r ") or "") .. "|cffffd100" .. answer.from .. "|r")
+    local zone = not answer.mine and ZoneOf(answer.from)
+    row.name:SetText((answer.mine and ("|cff808080" .. L["You"] .. ":|r ") or "") .. "|cffffd100" .. answer.from .. "|r"
+        .. (zone and ("  |cff808080" .. zone:gsub("|", "||") .. "|r") or ""))
     row.badge:SetText(answer.help and ("|cff20ff20" .. L["Available to help"] .. "|r") or "")
     local bits = { KnowsLine(answer) }
     for _, c in ipairs(answer.chars) do
@@ -320,7 +343,7 @@ FillLive = function()
     if not entry then
         p.status:SetText("")
     elseif not mineAsked then
-        p.status:SetText(L["Ask who can make it: your guild and the allied guilds answer."])
+        p.status:SetText(L["Search for who can make it: your guild and the allied guilds answer."])
     else
         local others = 0
         for _, a in ipairs(answers) do if not a.mine then others = others + 1 end end
@@ -349,7 +372,7 @@ function ns.BuildProfessionsPanel()
     panel = p
     K.NewPageTitle(p, L["Professions"], { L["Professions"],
         L["Find who can make a recipe in your guild and the allied guilds."],
-        L["Pick a recipe, then Ask: every La Taverne whose character, or one of its alts, knows it answers by itself. Nothing is kept once you leave the page."],
+        L["Pick a recipe, then Search: every La Taverne whose character, or one of its alts, knows it answers by itself, in the background. Nothing is written in chat, and nothing is kept once you leave the page."],
         L["Your recipes are shared the same way: untick Share my recipes to stop answering."] })
 
     -- Left: search and suggestions.
@@ -381,7 +404,7 @@ function ns.BuildProfessionsPanel()
     p.hint:SetWidth(290)
     p.hint:SetJustifyH("LEFT")
 
-    -- Right: the recipe picked, Ask, the answers.
+    -- Right: the recipe picked, Search, the answers.
     local right = CreateFrame("Frame", nil, p)
     right:SetPoint("TOPLEFT", 336, -40)
     right:SetPoint("BOTTOMRIGHT", -4, 40)
@@ -393,6 +416,12 @@ function ns.BuildProfessionsPanel()
     p.chosen:SetPoint("TOPLEFT", 0, 0)
     p.chosen:SetPoint("RIGHT", 0, 0)
     p.chosen:SetHeight(44)
+    p.chosen:EnableMouse(true)
+    p.chosen:SetScript("OnEnter", function(self)
+        local entry = selected and ns.Recipes:Get(selected)
+        if entry then RecipeTooltip(self, entry) end
+    end)
+    p.chosen:SetScript("OnLeave", function() GameTooltip:Hide() end)
     p.chosenIcon = p.chosen:CreateTexture(nil, "ARTWORK")
     p.chosenIcon:SetSize(36, 36)
     p.chosenIcon:SetPoint("LEFT", 4, 0)
@@ -404,11 +433,11 @@ function ns.BuildProfessionsPanel()
     p.chosenProf = K.NewLabel(p.chosen, "", "GameFontHighlightSmall")
     p.chosenProf:SetPoint("BOTTOMLEFT", p.chosenIcon, "BOTTOMRIGHT", 8, 2)
 
-    p.ask = K.NewButton(right, L["Ask the alliance"], 140, 24)
+    p.ask = K.NewButton(right, L["Search"], 140, 24)
     p.ask:SetPoint("TOPRIGHT", -4, -10)
-    K.WithTooltip(p.ask, { L["Ask the alliance"],
-        L["A hidden question to your guild and the allied guilds. Those whose characters know the recipe answer within a few seconds."],
-        L["One question every 5 seconds."] })
+    K.WithTooltip(p.ask, { L["Search"],
+        L["Searches your guild and the allied guilds in the background: nothing is written in chat. Those whose characters know the recipe answer within a few seconds."],
+        L["One search every 5 seconds."] })
     p.ask:SetScript("OnClick", function()
         if not selected then return end
         local ok, sent = ns.Recipes:Ask(selected)
@@ -445,7 +474,7 @@ function ns.BuildProfessionsPanel()
     -- (The recipe list loaded, a question, an answer: the whole page, suggestions included.)
     ns.Recipes:OnChange(function() Fill() end)
     p.Refresh = Fill
-    -- Live: "Searching...", the times, the Ask button's 5 seconds.
+    -- Live: "Searching...", the times, the Search button's 5 seconds.
     local wait = 0
     p:SetScript("OnUpdate", function(_, elapsed)
         wait = wait - elapsed

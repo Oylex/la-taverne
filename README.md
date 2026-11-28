@@ -77,7 +77,7 @@ The guilds talk over a hidden channel. If the game drops it (a chat server hiccu
 ### Professions
 
 - Type a recipe's name, or shift-click an item into the box, and pick the recipe.
-- **Ask the alliance:** every La Taverne in your guild and the allied guilds whose character, or one of its alts, knows the recipe answers within a few seconds, with the cooldown if it has one. Nothing is written in chat.
+- **Search:** every La Taverne in your guild and the allied guilds whose character, or one of its alts, knows the recipe answers within a few seconds, with the cooldown if it has one, and their zone when they share it on the map (or the guild roster shows it). Nothing is written in chat.
 - **Whisper** opens the chat box on them with the item ready, not sent.
 - Your own recipes are shared the same way. Tick **Available to help** to say you're happy to craft for others: you come first in their list. Untick **Share my recipes** to stop answering.
 
